@@ -1,0 +1,453 @@
+
+.MODEL SMALL
+.STACK 100H
+
+.DATA
+MENU DB 13,10,'===== HOTEL MANAGEMENT SYSTEM =====',13,10
+     DB '1. Add Customer & Book Room',13,10
+     DB '2. Cancel Booking',13,10
+     DB '3. Display All Rooms',13,10
+     DB '4. Search Customer',13,10
+     DB '5. Show Free Rooms',13,10
+     DB '6. Exit',13,10
+     DB 'Enter choice: $'
+
+MSG_NAME DB 13,10,'Enter Customer Name: $'
+MSG_ROOM DB 13,10,'Enter Room No (1-20): $'
+MSG_BOOKED DB 13,10,'Room booked successfully for $'
+MSG_ASSIGN DB '. Room No $'
+MSG_CANCEL DB 13,10,'Enter Room No to Cancel: $'
+MSG_CANCELLED DB 13,10,'Booking Cancelled. Room is now free.$'
+MSG_OCCUPIED DB 13,10,'Room already booked!$'
+MSG_INVALID DB 13,10,'Invalid Room No! Use 1-20.$'
+MSG_FREE DB 13,10,'Room is already free.$'
+MSG_NOTFOUND DB 13,10,'No booking found for this room.$'
+MSG_SEARCH DB 13,10,'Enter Room No to Search: $'
+MSG_FOUND DB 13,10,'Booked by: $'
+MSG_FREE_HEADER DB 13,10,'Free Rooms: $'
+MSG_NONE_FREE DB 'None - All rooms booked$'
+MSG_ALL_ROOMS DB 13,10,'--- Room Status ---$'
+MSG_OTHER_FREE DB 13,10,'Other rooms are free.$'
+MSG_BOOKED_BY DB 'Booked by: $'
+
+TOTAL_ROOMS EQU 20
+ROOMS DB TOTAL_ROOMS DUP(0)
+NAMES DB TOTAL_ROOMS*20 DUP('$')
+
+CHOICE DB ?
+ROOM_NO DB ?
+TEMP_NAME DB 20,?,20 DUP(0)
+CRLF DB 13,10,'$'
+
+.CODE
+MAIN PROC
+    MOV AX,@DATA
+    MOV DS,AX
+    MOV ES,AX
+
+MAIN_LOOP:
+    CALL CLEAR_BUFFER
+    MOV AH,09H
+    LEA DX,CRLF
+    INT 21H
+    LEA DX,MENU
+    INT 21H
+
+    CALL GET_CHOICE
+    MOV CHOICE,AL
+
+    CMP AL,1
+    JE BOOK_ROOM
+    CMP AL,2
+    JE CANCEL_ROOM
+    CMP AL,3
+    JE DISPLAY_ROOMS
+    CMP AL,4
+    JE SEARCH_ROOM
+    CMP AL,5
+    JE SHOW_FREE
+    CMP AL,6
+    JE EXIT_PROG
+    JMP MAIN_LOOP
+
+; ---------------- BOOK ----------------
+BOOK_ROOM:
+    CALL GET_ROOM_NO
+    DEC AL
+    MOV BL,AL
+    XOR BH,BH
+
+    CMP ROOMS[BX],1
+    JE ROOM_TAKEN
+
+    MOV AH,09H
+    LEA DX,MSG_NAME
+    INT 21H
+    MOV AH,0AH
+    LEA DX,TEMP_NAME
+    INT 21H
+
+    MOV ROOMS[BX],1
+    CALL SAVE_CUSTOMER
+
+    MOV AH,09H
+    LEA DX,MSG_BOOKED
+    INT 21H
+    
+    MOV SI,BX
+    CALL PRINT_CUSTOMER
+    
+    LEA DX,MSG_ASSIGN
+    INT 21H
+
+    MOV AL,ROOM_NO
+    CALL PRINT_NUM
+    
+    MOV AH,09H
+    LEA DX,CRLF
+    INT 21H
+    JMP MAIN_LOOP
+
+ROOM_TAKEN:
+    MOV AH,09H
+    LEA DX,MSG_OCCUPIED
+    INT 21H
+    LEA DX,CRLF
+    INT 21H
+    JMP MAIN_LOOP
+
+
+CANCEL_ROOM:
+    CALL GET_CANCEL_ROOM
+    DEC AL
+    MOV BL,AL
+    XOR BH,BH
+
+    CMP ROOMS[BX],0
+    JE ALREADY_FREE
+
+    MOV ROOMS[BX],0
+    CALL CLEAR_CUSTOMER
+
+    MOV AH,09H
+    LEA DX,MSG_CANCELLED
+    INT 21H
+    LEA DX,CRLF
+    INT 21H
+    JMP MAIN_LOOP
+
+ALREADY_FREE:
+    MOV AH,09H
+    LEA DX,MSG_FREE
+    INT 21H
+    LEA DX,CRLF
+    INT 21H
+    JMP MAIN_LOOP
+
+; ---------------- DISPLAY ----------------
+DISPLAY_ROOMS:
+    MOV AH,09H
+    LEA DX,MSG_ALL_ROOMS
+    INT 21H
+    LEA DX,CRLF
+    INT 21H
+
+    XOR SI,SI
+    MOV CX,TOTAL_ROOMS
+    XOR DI,DI
+
+DISP_LOOP:
+    PUSH CX
+    PUSH SI
+
+    CMP ROOMS[SI],1
+    JE DISP_BOOKED
+
+    MOV DI,1
+    JMP NEXT_DISP
+
+DISP_BOOKED:
+    MOV AH,09H
+    LEA DX,MSG_BOOKED_BY
+    INT 21H
+    POP SI
+    PUSH SI
+    CALL PRINT_CUSTOMER
+    LEA DX,CRLF
+    MOV AH,09H
+    INT 21H
+
+NEXT_DISP:
+    POP SI
+    POP CX
+    INC SI
+    LOOP DISP_LOOP
+
+    CMP DI,1
+    JNE DISP_END
+    MOV AH,09H
+    LEA DX,MSG_OTHER_FREE
+    INT 21H
+
+DISP_END:
+    MOV AH,09H
+    LEA DX,CRLF
+    INT 21H
+    JMP MAIN_LOOP
+
+; ---------------- SEARCH ----------------
+SEARCH_ROOM:
+    CALL GET_SEARCH_ROOM
+    DEC AL
+    MOV BL,AL
+    XOR BH,BH
+
+    CMP ROOMS[BX],0
+    JE NOT_FOUND
+
+    MOV AH,09H
+    LEA DX,MSG_FOUND
+    INT 21H
+
+    MOV SI,BX
+    CALL PRINT_CUSTOMER
+    LEA DX,CRLF
+    MOV AH,09H
+    INT 21H
+    JMP MAIN_LOOP
+
+NOT_FOUND:
+    MOV AH,09H
+    LEA DX,MSG_NOTFOUND
+    INT 21H
+    LEA DX,CRLF
+    INT 21H
+    JMP MAIN_LOOP
+
+; ---------------- FREE ROOMS ----------------
+SHOW_FREE:
+    MOV AH,09H
+    LEA DX,MSG_FREE_HEADER
+    INT 21H
+
+    XOR DI,DI
+    XOR SI,SI
+    MOV CX,TOTAL_ROOMS
+
+FREE_LOOP:
+    CMP ROOMS[SI],0
+    JNE NEXT_FREE
+
+    INC DI
+    MOV AX,SI
+    INC AX
+    CALL PRINT_NUM
+    MOV DL,' '
+    MOV AH,02H
+    INT 21H
+
+NEXT_FREE:
+    INC SI
+    LOOP FREE_LOOP
+
+    CMP DI,0
+    JNE FREE_DONE
+
+    LEA DX,MSG_NONE_FREE
+    MOV AH,09H
+    INT 21H
+
+FREE_DONE:
+    MOV AH,09H
+    LEA DX,CRLF
+    INT 21H
+    JMP MAIN_LOOP
+
+; ---------------- EXIT ----------------
+EXIT_PROG:
+    MOV AH,4CH
+    INT 21H
+
+; ---------------- PROCEDURES ----------------
+
+CLEAR_BUFFER PROC
+    MOV AH,0CH
+    MOV AL,0
+    INT 21H
+    RET
+CLEAR_BUFFER ENDP
+
+GET_CHOICE PROC
+    MOV AH,01H
+    INT 21H
+    SUB AL,'0'
+    RET
+GET_CHOICE ENDP
+
+GET_ROOM_NO PROC
+    GET_AGAIN:
+    MOV AH,09H
+    LEA DX,MSG_ROOM
+    INT 21H
+    CALL INPUT_NUM
+    MOV ROOM_NO,AL
+    CMP AL,1
+    JB INVALID_INP
+    CMP AL,TOTAL_ROOMS
+    JA INVALID_INP
+    RET
+    INVALID_INP:
+    MOV AH,09H
+    LEA DX,MSG_INVALID
+    INT 21H
+    LEA DX,CRLF
+    INT 21H
+    JMP GET_AGAIN
+GET_ROOM_NO ENDP
+
+GET_CANCEL_ROOM PROC
+    CANCEL_AGAIN:
+    MOV AH,09H
+    LEA DX,MSG_CANCEL
+    INT 21H
+    CALL INPUT_NUM
+    CMP AL,1
+    JB CANCEL_AGAIN
+    CMP AL,TOTAL_ROOMS
+    JA CANCEL_AGAIN
+    RET
+GET_CANCEL_ROOM ENDP
+
+GET_SEARCH_ROOM PROC
+    SEARCH_AGAIN:
+    MOV AH,09H
+    LEA DX,MSG_SEARCH
+    INT 21H
+    CALL INPUT_NUM
+    CMP AL,1
+    JB SEARCH_AGAIN
+    CMP AL,TOTAL_ROOMS
+    JA SEARCH_AGAIN
+    RET
+GET_SEARCH_ROOM ENDP
+
+INPUT_NUM PROC
+    MOV AH,01H
+    INT 21H
+    SUB AL,'0'
+    MOV BL,AL
+    MOV AH,01H
+    INT 21H
+    CMP AL,13
+    JE SINGLE_DIGIT
+    SUB AL,'0'
+    MOV BH,AL
+    MOV AL,BL
+    MOV CL,10
+    MUL CL
+    ADD AL,BH
+    RET
+    SINGLE_DIGIT:
+    MOV AL,BL
+    RET
+INPUT_NUM ENDP
+
+PRINT_NUM PROC
+    XOR AH,AH
+    MOV BL,10
+    DIV BL
+    CMP AL,0
+    JE PRINT_SINGLE
+    PUSH AX
+    ADD AL,'0'
+    MOV DL,AL
+    MOV AH,02H
+    INT 21H
+    POP AX
+    PRINT_SINGLE:
+    ADD AH,'0'
+    MOV DL,AH
+    MOV AH,02H
+    INT 21H
+    RET
+PRINT_NUM ENDP
+
+SAVE_CUSTOMER PROC
+    PUSH AX
+    PUSH BX
+    PUSH CX
+    PUSH SI
+    PUSH DI
+
+    MOV AX,BX
+    MOV CX,20
+    MUL CX
+    MOV DI,AX
+    LEA SI,TEMP_NAME+2
+    MOV CL,TEMP_NAME+1
+    XOR CH,CH
+    CMP CX,0
+    JE PUT_NAME_DOLLAR
+    COPY_NAME_LOOP:
+        MOV AL,[SI]
+        CMP AL,13
+        JE SKIP_CR
+        MOV NAMES[DI],AL
+        INC DI
+    SKIP_CR:
+        INC SI
+        LOOP COPY_NAME_LOOP
+    PUT_NAME_DOLLAR:
+    MOV BYTE PTR NAMES[DI],'$'
+
+    POP DI
+    POP SI
+    POP CX
+    POP BX
+    POP AX
+    RET
+SAVE_CUSTOMER ENDP
+
+CLEAR_CUSTOMER PROC
+    PUSH AX
+    PUSH BX
+    PUSH CX
+    PUSH DI
+
+    MOV AX,BX
+    MOV CX,20
+    MUL CX
+    MOV DI,AX
+    MOV CX,20
+    MOV AL,'$'
+    REP STOSB
+
+    POP DI
+    POP CX
+    POP BX
+    POP AX
+    RET
+CLEAR_CUSTOMER ENDP
+
+PRINT_CUSTOMER PROC
+    PUSH AX
+    PUSH BX
+    PUSH DX
+    PUSH SI
+
+    MOV AX,SI
+    MOV BX,20
+    MUL BX
+    LEA DX,NAMES
+    ADD DX,AX
+    MOV AH,09H
+    INT 21H
+
+    POP SI
+    POP DX
+    POP BX
+    POP AX
+    RET
+PRINT_CUSTOMER ENDP
+
+END MAIN
